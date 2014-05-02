@@ -107,6 +107,16 @@ module PrestaShopHelpers
 		return page.current_url[/\bid_tax_rules_group=(\d+)/, 1].to_i
 	end
 
+	@@tax_group_ids = {}
+	def get_or_create_tax_group_id_for_rate rate
+		unless @@tax_group_ids[rate]
+			tax_id = create_tax :name => "#{rate}% Tax (Rate)", :rate => rate
+			@@tax_group_ids[rate] = create_tax_group :name => "#{rate}% Tax (Group)",
+				:taxes => [{:tax_id => tax_id}]
+		end
+		return @@tax_group_ids[rate]
+	end
+
 	def create_carrier options
 		find('#maintab-AdminParentShipping').hover
 		find('#subtab-AdminCarriers a').click
