@@ -1,4 +1,3 @@
-#!/usr/bin/ruby
 # encoding: UTF-8
 
 require 'capybara'
@@ -6,9 +5,9 @@ require 'capybara/dsl'
 require 'capybara/rspec'
 require 'capybara-screenshot'
 require 'capybara-screenshot/rspec'
+require 'json'
 
 Capybara.default_driver = :selenium
-Capybara.app_host = 'http://localhost/1.6'
 Capybara.save_and_open_page_path = "screenshots"
 
 module PrestaShopHelpers
@@ -55,6 +54,13 @@ module PrestaShopHelpers
 		page.should_not have_field('link_rewrite_1', with: "")
 		find('button[name=submitAddproductAndStay]').click
 		expect(page).to have_selector '.alert.alert-success'
+
+		# allow ordering if out of stock
+		find('#link-Quantities').click
+		choose 'out_of_stock_2'
+		first('button[name=submitAddproductAndStay]').click
+		expect(page).to have_selector '.alert.alert-success'
+
 		return page.current_url[/\bid_product=(\d+)/, 1].to_i
 	end
 
@@ -107,7 +113,7 @@ module PrestaShopHelpers
 		find('#page-header-desc-carrier-new_carrier').click
 
 		fill_in 'name', :with => options[:name]
-		fill_in 'delay_1', :with => options[:delay]
+		fill_in 'delay_1', :with => options[:delay] || 'Turtle'
 		fill_in 'grade', :with => options[:grade] if options[:grade]
 		fill_in 'url', :with => options[:tracking_url] if options[:tracking_url]
 
@@ -132,39 +138,41 @@ module PrestaShopHelpers
 			find("option[value='#{oob}']").click
 		end
 
-		options[:ranges].each_with_index do |range, i|
+		if options[:ranges]
+			options[:ranges].each_with_index do |range, i|
 
-			if i > 0
-				find('#add_new_range').click
-			end
+				if i > 0
+					find('#add_new_range').click
+				end
 
-			if i == 0
-				find("input[name='range_inf[#{i}]']").set range[:from_included]
-				find("input[name='range_sup[#{i}]']").set range[:to_excluded]
-			else
-				find("input[name='range_inf[]']:nth-of-type(#{i})").set range[:from_included]
-				find("input[name='range_sup[]']:nth-of-type(#{i})").set range[:to_excluded]
-			end
-
-			sleep 1
-
-			range[:prices].each_pair do |zone, price|
-
-				nth = i > 0 ? ":nth-of-type(#{i})" : ""
-
-				if zone == 0
-					find('.fees_all input[type="checkbox"]').click if i == 0
-					tp = all('.fees_all input[type="text"]')[i]
-					tp.set price
-					sleep 4
-					tp.native.send_keys :tab
+				if i == 0
+					find("input[name='range_inf[#{i}]']").set range[:from_included]
+					find("input[name='range_sup[#{i}]']").set range[:to_excluded]
 				else
-					check "zone_#{zone}"
-					sleep 1
-					if i == 0
-						find("input[name='fees[#{zone}][#{i}]']").set price
+					find("input[name='range_inf[]']:nth-of-type(#{i})").set range[:from_included]
+					find("input[name='range_sup[]']:nth-of-type(#{i})").set range[:to_excluded]
+				end
+
+				sleep 1
+
+				range[:prices].each_pair do |zone, price|
+
+					nth = i > 0 ? ":nth-of-type(#{i})" : ""
+
+					if zone == 0
+						find('.fees_all input[type="checkbox"]').click if i == 0
+						tp = all('.fees_all input[type="text"]')[i]
+						tp.set price
+						sleep 4
+						tp.native.send_keys :tab
 					else
-						find("input[name='fees[#{zone}][]']"+nth).set price
+						check "zone_#{zone}"
+						sleep 1
+						if i == 0
+							find("input[name='fees[#{zone}][#{i}]']").set price
+						else
+							find("input[name='fees[#{zone}][]']"+nth).set price
+						end
 					end
 				end
 			end
@@ -203,74 +211,34 @@ module PrestaShopHelpers
 		end
 	end
 
-	def order_current_cart_5_steps
+	def order_current_cart_5_steps options
 		visit "/index.php?controller=order"
 		find('a.standard-checkout').click
 		find('button[name="processAddress"]').click
-		sleep 2
-		expect(page).to have_selector '#cgv'
-		check 'cgv'
+		expect(page).to have_selector '#uniform-cgv'
+		page.find('#cgv', :visible => false).click
 		find('button[name="processCarrier"]').click
+		find('a.bankwire').click
+		find('#cart_navigation button').click
+		sleep 5
+		return page.current_url[/\bid_order=(\d+)/, 1].to_i
+	end
+
+	def validate_order options
+		visit '/admin-dev/'
+		find('#maintab-AdminParentOrders').hover
+		find('#subtab-AdminOrders a').click
+
+		url = first('td.pointer[onclick]')['onclick'][/\blocation\s*=\s*'(.*?)'/, 1].sub(/\bid_order=\d+/, "id_order=#{options[:id]}")
+		visit "/admin-dev/#{url}"
+		find('#id_order_state_chosen').click
+		find('li[data-option-array-index="6"]').click
+		find('button[name="submitState"]').click
+		visit find('a[href*="generateInvoicePDF"]')['href']+'&debug=1'
+		return JSON.parse(page.find('body').text)
 	end
 end
 
 RSpec.configure do |config|
   config.include PrestaShopHelpers
-end
-
-describe 'Test Invoice' do
-
-	it 'should do stuff' do
-		login_to_front_office
-		add_products_to_cart [{:id => 3, :quantity => 2}, {:id => 7, :quantity => 4}]
-		order_current_cart_5_steps
-		sleep 10
-	end
-
-	if false
-		it 'should work' do
-			login_to_back_office
-
-			create_carrier :name => 'Free Carrier',
-				:delay => 'Very Slow Like a Turtle',
-				:grade => 4,
-				:tracking_url => 'http://turtle.com',
-				:with_handling_fees => true,
-				:free_shipping => false,
-				:based_on => :price,
-				:tax_group_id => 60,
-				:out_of_range_behavior => :highest,
-				:ranges => [
-					{
-						:from_included => 0,
-						:to_excluded => 100,
-						:prices => {
-							0 => 10,
-							3 => 4
-						}
-					},
-					{
-						:from_included => 110,
-						:to_excluded => 200,
-						:prices => {
-							0 => 5,
-							3 => 22
-						}
-					}
-				],
-			:max_package_height => 22,
-			:max_package_width => 43,
-			:max_package_depth => 43,
-			:max_package_weight => 43,
-			:allowed_groups => [1, 3]
-
-			if false
-				tax_id = create_tax :name => 'Ancienne TVA Française', :rate => 19.6
-				tax_group_id = create_tax_group :name => 'FRRRR', :taxes => [{:tax_id => tax_id}]
-
-				product0 = create_product :name => 'Petit Sachet de Vis Cruciformes', :price => 1.05, :tax_group_id => tax_group_id
-				product1 = create_product :name => 'Gros Sachet de Vis Cruciformes', :price => 3.49, :tax_group_id => tax_group_id
-			end
-		end
-	end
 end
