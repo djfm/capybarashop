@@ -138,13 +138,15 @@ module PrestaShopHelpers
 			find("option[value='#{oob}']").click
 		end
 
-		if options[:ranges]
-			options[:ranges].each_with_index do |range, i|
+		options[:ranges] = options[:ranges] || [{:from_included => 0, :to_excluded => 1000, :prices => {0 => 0}}]
+		
+		options[:ranges].each_with_index do |range, i|
 
-				if i > 0
-					find('#add_new_range').click
-				end
+			if i > 0
+				find('#add_new_range').click
+			end
 
+			unless options[:free_shipping]
 				if i == 0
 					find("input[name='range_inf[#{i}]']").set range[:from_included]
 					find("input[name='range_sup[#{i}]']").set range[:to_excluded]
@@ -152,22 +154,26 @@ module PrestaShopHelpers
 					find("input[name='range_inf[]']:nth-of-type(#{i})").set range[:from_included]
 					find("input[name='range_sup[]']:nth-of-type(#{i})").set range[:to_excluded]
 				end
+			end
 
-				sleep 1
+			sleep 1
 
-				range[:prices].each_pair do |zone, price|
+			range[:prices].each_pair do |zone, price|
 
-					nth = i > 0 ? ":nth-of-type(#{i})" : ""
+				nth = i > 0 ? ":nth-of-type(#{i})" : ""
 
-					if zone == 0
-						find('.fees_all input[type="checkbox"]').click if i == 0
+				if zone == 0
+					find('.fees_all input[type="checkbox"]').click if i == 0
+					unless options[:free_shipping]
 						tp = all('.fees_all input[type="text"]')[i]
 						tp.set price
-						sleep 4
 						tp.native.send_keys :tab
-					else
-						check "zone_#{zone}"
-						sleep 1
+					end
+					sleep 4
+				else
+					check "zone_#{zone}"
+					sleep 1
+					unless options[:free_shipping]
 						if i == 0
 							find("input[name='fees[#{zone}][#{i}]']").set price
 						else
@@ -198,8 +204,9 @@ module PrestaShopHelpers
 		find('.buttonNext.btn.btn-default').click
 
 		find('label[for="active_on"]').click
-
+		sleep 4 #this wait seems necessary, strange
 		find('a.buttonFinish').click
+		expect(page).to have_selector '.alert.alert-success'
 	end
 
 	def add_products_to_cart products
@@ -217,6 +224,7 @@ module PrestaShopHelpers
 		find('button[name="processAddress"]').click
 		expect(page).to have_selector '#uniform-cgv'
 		page.find('#cgv', :visible => false).click
+		page.find(:xpath, '//tr[contains(., "'+options[:carrier]+'")]').find('input[type=radio]', :visible => false).click
 		find('button[name="processCarrier"]').click
 		find('a.bankwire').click
 		find('#cart_navigation button').click
