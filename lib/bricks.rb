@@ -119,6 +119,10 @@ module PrestaShopHelpers
 		return page.current_url[/\bid_tax_rules_group=(\d+)/, 1].to_i
 	end
 
+	def create_cart_rule options
+		visit '/admin-dev'
+	end
+
 	@@tax_group_ids = {}
 	def get_or_create_tax_group_id_for_rate rate
 		unless @@tax_group_ids[rate]
@@ -307,27 +311,27 @@ module PrestaShopHelpers
 
 	def test_invoice scenario
 
-		set_order_process_type scenario[:meta][:order_process]
+		set_order_process_type scenario['meta']['order_process'].to_sym
 
 		carrier_name = get_or_create_carrier({
-			:name => scenario[:carrier][:name],
-			:with_handling_fees => scenario[:carrier][:with_handling_fees],
-			:free_shipping => scenario[:carrier][:shipping_fees] == 0
+			:name => scenario['carrier']['name'],
+			:with_handling_fees => scenario['carrier']['with_handling_fees'],
+			:free_shipping => scenario['carrier']['shipping_fees'] == 0
 		})
 
 		products = []
-		scenario[:products].each_pair do |name, data|
+		scenario['products'].each_pair do |name, data|
 			id = get_or_create_product({
 				:name => name,
-				:price => data[:price],
-				:tax_group_id => get_or_create_tax_group_id_for_rate(data[:vat])
+				:price => data['price'],
+				:tax_group_id => get_or_create_tax_group_id_for_rate(data['vat'])
 			})
-			products << {id: id, quantity: data[:quantity]}
+			products << {id: id, quantity: data['quantity']}
 		end
 
 		add_products_to_cart products
 
-		order_id = if scenario[:meta][:order_process] == :five_steps
+		order_id = if scenario['meta']['order_process'] == 'five_steps'
 			order_current_cart_5_steps :carrier => carrier_name
 		else
 			order_current_cart_opc :carrier => carrier_name
@@ -335,10 +339,10 @@ module PrestaShopHelpers
 		invoice = validate_order :id => order_id
 		
 
-		if scenario[:expect][:invoice]
-			if total = scenario[:expect][:invoice][:total]
-				if total[:total_with_tax]
-					invoice['order']['total_products_wt'].to_f.should eq total[:total_with_tax]
+		if scenario['expect']['invoice']
+			if total = scenario['expect']['invoice']['total']
+				if total['total_with_tax']
+					invoice['order']['total_products_wt'].to_f.should eq total['total_with_tax']
 				end
 			end
 		end

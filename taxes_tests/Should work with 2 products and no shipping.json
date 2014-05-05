@@ -1,0 +1,32 @@
+{
+	"meta": {
+		"skip": true,
+		"order_process": "five_steps",
+		"rounding_rule": "total",
+		"rounding_method": "half_up"
+	},
+	"carrier": {
+		"name": "SeleniumShipping",
+		"with_handling_fees": false,
+		"shipping_fees": 0
+	},
+	"products": {
+		"Petit Sachet de Vis Cruciformes": {
+			"price": 1.05,
+			"vat": 19.6,
+			"quantity": 1
+		},
+		"Gros Sachet de Vis Cruciformes": {
+			"price": 3.49,
+			"vat": 19.6,
+			"quantity": 2
+		}
+	},
+	"expect": {
+		"invoice": {
+			"total": {
+				"total_with_tax": 9.61
+			}
+		}
+	}
+}

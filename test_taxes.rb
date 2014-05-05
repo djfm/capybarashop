@@ -3,6 +3,8 @@
 require_relative 'lib/bricks.rb'
 require_relative 'lib/dumper.rb'
 
+require 'json'
+
 # configuration
 
 # READ ME CAREFULLY
@@ -31,71 +33,21 @@ describe 'Test Invoice - Simple' do
 		login_to_front_office
 	end
 
-	describe 'Basic Orders' do
-
-		it 'Should work with 2 products and no shipping' do
-			test_invoice({
-				meta: {
-					order_process: :five_steps,
-					rounding_rule: :total,
-					rounding_method: :half_up 
-				},
-				carrier: {
-					name: 'SeleniumShipping',
-					with_handling_fees: false,
-					shipping_fees: 0
-				},
-				products: {
-					'Petit Sachet de Vis Cruciformes' => {
-						price: 1.05,
-						vat: 19.6,
-						quantity: 1
-					},
-					'Gros Sachet de Vis Cruciformes' => {
-						price: 3.49,
-						vat: 19.6,
-						quantity: 2
-					}
-				},
-				expect: {
-					invoice: {
-						total: {
-							total_with_tax: 9.61
-						}
-					}
-				}
-			})
+	describe 'Taxes' do
+		taxes_tests_root = File.dirname(__FILE__)+'/taxes_tests'
+		Dir.entries(taxes_tests_root).each do |entry|
+			if entry =~ /\.json$/
+				it File.basename(entry, ".json") do
+					scenario = JSON.parse(File.read("#{taxes_tests_root}/#{entry}"))
+					unless scenario['meta']['skip']
+						puts "Running #{entry}"
+						test_invoice scenario
+					else
+						puts "Skipping #{entry}"
+					end
+				end
+			end
 		end
-
-		it 'Should work with one product and no shipping' do
-			test_invoice({
-				meta: {
-					order_process: :opc,
-					rounding_rule: :total,
-					rounding_method: :half_up 
-				},
-				carrier: {
-					name: 'SeleniumShipping',
-					with_handling_fees: false,
-					shipping_fees: 0
-				},
-				products: {
-					'Petit Sachet de Vis Cruciformes' => {
-						price: 1.05,
-						vat: 19.6,
-						quantity: 4
-					}
-				},
-				expect: {
-					invoice: {
-						total: {
-							total_with_tax: 5.02
-						}
-					}
-				}
-			})
-		end
-
 	end
 
 end

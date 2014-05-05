@@ -20,9 +20,8 @@ dumper = Dumper.new :user => 'root', :password => '', :database => '1.6'
 describe 'Test Invoice - Simple' do
 
 	it 'should be fun' do
-		login_to_front_office
-		add_products_to_cart [{id: 1, quantity: 1}]
-		order_current_cart_opc :carrier => 'My carrier'
+		login_to_back_office
+		create_cart_rule :product => 1
 		sleep 60
 	end
 
