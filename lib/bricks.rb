@@ -37,8 +37,8 @@ module PrestaShopHelpers
 		page.should_not have_selector '#login_form'
 	end
 
-	#preconditions: need to be logged in!
 	def create_product options
+		visit '/admin-dev'
 		find('#maintab-AdminCatalog').hover
 		find('#subtab-AdminProducts a').click
 		find('#page-header-desc-product-new_product').click
@@ -64,7 +64,18 @@ module PrestaShopHelpers
 		return page.current_url[/\bid_product=(\d+)/, 1].to_i
 	end
 
+	@@products = {}
+	def get_or_create_product options
+
+		unless @@products[options[:name]]
+			@@products[options[:name]] = create_product options
+		end
+
+		return @@products[options[:name]]
+	end
+
 	def create_tax options
+		visit '/admin-dev'
 		find('#maintab-AdminParentLocalization').hover
 		find('#subtab-AdminTaxes a').click
 		find('#page-header-desc-tax-new_tax').click
@@ -77,6 +88,7 @@ module PrestaShopHelpers
 	end
 
 	def create_tax_group options
+		visit '/admin-dev'
 		find('#maintab-AdminParentLocalization').hover
 		find('#subtab-AdminTaxRulesGroup a').click
 		find('#page-header-desc-tax_rules_group-new_tax_rules_group').click
@@ -118,6 +130,7 @@ module PrestaShopHelpers
 	end
 
 	def create_carrier options
+		visit '/admin-dev'
 		find('#maintab-AdminParentShipping').hover
 		find('#subtab-AdminCarriers a').click
 		find('#page-header-desc-carrier-new_carrier').click
@@ -219,6 +232,15 @@ module PrestaShopHelpers
 		expect(page).to have_selector '.alert.alert-success'
 	end
 
+	@@carriers = {}
+	def get_or_create_carrier options
+		unless @@carriers[options[:name]]
+			create_carrier options
+			@@carriers[options[:name]] = true
+		end
+		options[:name]
+	end
+
 	def add_products_to_cart products
 		products.each do |product|
 			visit "/index.php?id_product=#{product[:id]}&controller=product&id_lang=1"
@@ -226,6 +248,20 @@ module PrestaShopHelpers
 			find('#add_to_cart button').click
 			sleep 1
 		end
+	end
+
+	def set_order_process_type value
+		visit '/admin-dev'
+		find('#maintab-AdminParentPreferences').hover
+		find('#subtab-AdminOrderPreferences a').click
+		within '#PS_ORDER_PROCESS_TYPE' do
+			v = {:five_steps => 0, :opc => 1}[value] 
+			find("option[value='#{v}']").click
+		end
+		within '#configuration_fieldset_general' do
+			find('button[name="submitOptionsconfiguration"]').click
+		end
+		expect(page).to have_selector '.alert.alert-success'
 	end
 
 	def order_current_cart_5_steps options
@@ -238,8 +274,21 @@ module PrestaShopHelpers
 		find('button[name="processCarrier"]').click
 		find('a.bankwire').click
 		find('#cart_navigation button').click
-		sleep 5
-		return page.current_url[/\bid_order=(\d+)/, 1].to_i
+		order_id = page.current_url[/\bid_order=(\d+)/, 1].to_i
+		order_id.should be > 0
+		return order_id
+	end
+
+	def order_current_cart_opc options
+		visit "/index.php?controller=order-opc"
+		visit "/index.php?controller=order-opc" #yeah, twice, there's a bug
+		page.find('label[for="cgv"]').click
+		page.find(:xpath, '//tr[contains(., "'+options[:carrier]+'")]').find('input[type=radio]', :visible => false).click
+		find('a.bankwire').click
+		find('#cart_navigation button').click
+		order_id = page.current_url[/\bid_order=(\d+)/, 1].to_i
+		order_id.should be > 0
+		return order_id
 	end
 
 	def validate_order options
@@ -254,6 +303,45 @@ module PrestaShopHelpers
 		find('button[name="submitState"]').click
 		visit find('a[href*="generateInvoicePDF"]')['href']+'&debug=1'
 		return JSON.parse(page.find('body').text)
+	end
+
+	def test_invoice scenario
+
+		set_order_process_type scenario[:meta][:order_process]
+
+		carrier_name = get_or_create_carrier({
+			:name => scenario[:carrier][:name],
+			:with_handling_fees => scenario[:carrier][:with_handling_fees],
+			:free_shipping => scenario[:carrier][:shipping_fees] == 0
+		})
+
+		products = []
+		scenario[:products].each_pair do |name, data|
+			id = get_or_create_product({
+				:name => name,
+				:price => data[:price],
+				:tax_group_id => get_or_create_tax_group_id_for_rate(data[:vat])
+			})
+			products << {id: id, quantity: data[:quantity]}
+		end
+
+		add_products_to_cart products
+
+		order_id = if scenario[:meta][:order_process] == :five_steps
+			order_current_cart_5_steps :carrier => carrier_name
+		else
+			order_current_cart_opc :carrier => carrier_name
+		end
+		invoice = validate_order :id => order_id
+		
+
+		if scenario[:expect][:invoice]
+			if total = scenario[:expect][:invoice][:total]
+				if total[:total_with_tax]
+					invoice['order']['total_products_wt'].to_f.should eq total[:total_with_tax]
+				end
+			end
+		end
 	end
 end
 
