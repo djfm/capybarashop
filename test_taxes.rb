@@ -33,18 +33,23 @@ describe 'Test Invoice - Simple' do
 		login_to_front_office
 	end
 
+	after :each do
+		# created cart rules must not outlive a test
+		delete_cart_rules
+	end
+
 	describe 'Taxes' do
 		taxes_tests_root = File.dirname(__FILE__)+'/taxes_tests'
 		Dir.entries(taxes_tests_root).each do |entry|
 			if entry =~ /\.json$/
-				it File.basename(entry, ".json") do
-					scenario = JSON.parse(File.read("#{taxes_tests_root}/#{entry}"))
-					unless scenario['meta']['skip']
+				scenario = JSON.parse(File.read("#{taxes_tests_root}/#{entry}"))
+				unless scenario['meta']['skip']
+					it File.basename(entry, ".json") do
 						puts "Running #{entry}"
 						test_invoice scenario
-					else
-						puts "Skipping #{entry}"
 					end
+				else
+					puts "Skipping #{entry}"
 				end
 			end
 		end

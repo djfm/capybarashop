@@ -6,6 +6,7 @@ require 'capybara/rspec'
 require 'capybara-screenshot'
 require 'capybara-screenshot/rspec'
 require 'json'
+require 'set'
 
 Capybara.default_driver = :selenium
 Capybara.save_and_open_page_path = "screenshots"
@@ -49,6 +50,27 @@ module PrestaShopHelpers
 			within '#id_tax_rules_group' do
 				find("option[value='#{options[:tax_group_id]}']").click
 			end
+		end
+
+		if sp = options[:specific_price]
+			find('button[name=submitAddproductAndStay]').click
+			expect(page).to have_selector '.alert.alert-success'
+
+			find('#show_specific_price').click
+			if m = /^(\d+(?:\.\d+)?)\s+tax\s+included$/.match(sp.strip)
+				within '#sp_reduction_type' do
+					find('option[value="amount"]').click
+				end
+				fill_in 'sp_reduction', :with => m[1]
+			elsif m = /^(\d+(?:\.\d+)?)\s*%$/.match(sp.strip)
+				find('option[value="percentage"]').click
+				fill_in 'sp_reduction', :with => m[1]
+			else
+				throw "Invalid specific price: #{sp}"
+			end
+
+			first('button[name="submitAddproductAndStay"]').click
+			expect(page).to have_selector '.alert.alert-success'
 		end
 		find('#link-Seo').click		
 		page.should_not have_field('link_rewrite_1', with: "")
@@ -119,8 +141,120 @@ module PrestaShopHelpers
 		return page.current_url[/\bid_tax_rules_group=(\d+)/, 1].to_i
 	end
 
+	def click_label_for id
+		find("label[for='#{id}']").click
+	end
+
+	@@cart_rules = Set.new
 	def create_cart_rule options
 		visit '/admin-dev'
+		find('#maintab-AdminPriceRule').hover
+		find('#subtab-AdminCartRules a').click
+		find('#page-header-desc-cart_rule-new_cart_rule').click
+		fill_in 'name_1', :with => options[:name]
+
+		pu = options[:partial_use] != false
+		click_label_for "partial_use_#{pu ? 'on' : 'off'}"
+		click_label_for 'active_on'
+
+		find('#cart_rule_link_conditions').click
+		find('input[name="date_from"]').set '1900-01-01 00:00:00'
+		find('input[name="date_to"]').set '2500-01-01 00:00:00'
+
+		find('input[name="quantity"]').set 1000000
+		find('input[name="quantity_per_user"]').set 1000000
+
+		product_name = nil
+		if options[:product_id]
+			check 'product_restriction'
+			find('#product_restriction_div a').click
+			within '#product_rule_type_1' do 
+				find('option[value="products"]').click
+			end
+			find('#product_rule_group_table a[href*="javascript:addProductRule("]').click
+			find('#product_rule_1_1_choose_link').click
+			within '#product_rule_select_1_1_1' do
+				option = find("option[value='#{options[:product_id]}']", :visible => false)
+				option.click
+				product_name = option.native.text.strip
+			end
+			addButton = find('#product_rule_select_1_1_add')
+			addButton.click
+			addButton.native.send_keys :escape
+		end
+
+		find('#cart_rule_link_actions').click
+		
+		if options[:free_shipping]
+			click_label_for 'free_shipping_on'
+		else
+			click_label_for 'free_shipping_off'	
+		end
+
+		click_label_for 'free_gift_off'
+
+		amount_exp = /^(?:(\w+)\s+)?(\d+(?:\.\d+)?)\s*(?:tax\s+(excluded|included))$/
+		if m = amount_exp.match(options[:amount].strip)
+			currency, amount, with_tax = m[1].to_s.strip, m[2].to_f, (m[3] == 'included' ? 1 : 0)
+			choose 'apply_discount_amount'
+			fill_in 'reduction_amount', :with => amount
+			if currency != ''
+				within 'select[name="reduction_currency"]' do
+					find(:xpath, "//option[normalize-space()='#{currency}']").click
+				end
+			end
+			within 'select[name="reduction_tax"]' do
+				find("option[value='#{with_tax}']").click
+			end
+
+			find('#desc-cart_rule-save-and-stay').click
+			expect(page).to have_selector '.alert.alert-success'
+			find('#cart_rule_link_actions').click
+
+			if options[:product_id]
+				choose 'apply_discount_to_product'
+				fill_in 'reductionProductFilter', :with => product_name
+				find('div.ac_results ul li').click
+			end
+		elsif m = /^(\d+(?:\.\d+)?)\s*%$/.match(options[:amount].strip) 
+			percent = m[1]
+			choose 'apply_discount_percent'
+			fill_in 'reduction_percent', :with => percent
+			if options[:product_id]
+				choose 'apply_discount_to_selection'
+			else
+				choose 'apply_discount_to_order'
+			end
+		else
+			throw "Invalid cart rule amount specified!"
+		end
+
+		find('#desc-cart_rule-save-and-stay').click
+		expect(page).to have_selector '.alert.alert-success'
+		id = page.current_url[/\bid_cart_rule=(\d+)/, 1].to_i
+		id.should be > 0
+		@@cart_rules << id
+		return id
+	end
+
+	def delete_cart_rule id, andFromSet=true
+		visit '/admin-dev'
+		find('#maintab-AdminPriceRule').hover
+		find('#subtab-AdminCartRules a').click
+		url = first("a[href*='&deletecart_rule&']", :visible => false)['href']
+		url.gsub! /\bid_cart_rule=\d+/, "id_cart_rule=#{id}"
+		visit url
+		expect(page).to have_selector '.alert.alert-success'
+		if andFromSet
+			@@cart_rules.delete id
+		end
+	end
+
+	def delete_cart_rules
+		@@cart_rules.each do |id|
+			delete_cart_rule id, false
+		end
+		@@cart_rules = Set.new
 	end
 
 	@@tax_group_ids = {}
@@ -327,6 +461,15 @@ module PrestaShopHelpers
 				:tax_group_id => get_or_create_tax_group_id_for_rate(data['vat'])
 			})
 			products << {id: id, quantity: data['quantity']}
+
+			if data["discount"]
+				create_cart_rule({
+					:product_id => id,
+					:amount => data["discount"],
+					:free_shipping => false,
+					:name => "#{name} with (#{data['discount']}) discount"
+				}) 
+			end
 		end
 
 		add_products_to_cart products
@@ -337,12 +480,11 @@ module PrestaShopHelpers
 			order_current_cart_opc :carrier => carrier_name
 		end
 		invoice = validate_order :id => order_id
-		
 
 		if scenario['expect']['invoice']
 			if total = scenario['expect']['invoice']['total']
 				if total['total_with_tax']
-					invoice['order']['total_products_wt'].to_f.should eq total['total_with_tax']
+					invoice['order']['total_paid_tax_incl'].to_f.should eq total['total_with_tax']
 				end
 			end
 		end

@@ -21,7 +21,21 @@ describe 'Test Invoice - Simple' do
 
 	it 'should be fun' do
 		login_to_back_office
-		create_cart_rule :product => 1
+		if false
+			create_cart_rule({
+				:product_id => 1,
+				:name => 'Test Discount',
+				:free_shipping => true,
+				:amount => 'USD 10 tax excluded'
+			})
+		end
+
+		create_product({
+			:name => 'Lapin Crétin',
+			:price => 40,
+			:specific_price => '10.2 %'
+		})
+
 		sleep 60
 	end
 
