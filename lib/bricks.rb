@@ -27,6 +27,11 @@ module PrestaShopHelpers
 		expect(page).to have_selector '#maintab-AdminDashboard'
 	end
 
+	def logout_of_back_office
+		find('#employee_infos a').click
+		find('#header_logout').click
+	end
+
 	def login_to_front_office
 		visit '/'
 		find('a.login').click
@@ -36,6 +41,19 @@ module PrestaShopHelpers
 			find('#SubmitLogin').click
 		end
 		page.should_not have_selector '#login_form'
+	end
+
+	def set_friendly_urls on
+		visit '/admin-dev'
+		find('#maintab-AdminParentPreferences').hover
+		find('#subtab-AdminMeta a').click
+		if on
+			click_label_for 'PS_REWRITING_SETTINGS_on'
+		else
+			click_label_for 'PS_REWRITING_SETTINGS_off'
+		end
+		first('button[name="submitOptionsmeta"]').click
+		expect(page).to have_selector '.alert.alert-success'
 	end
 
 	def create_product options
@@ -57,12 +75,12 @@ module PrestaShopHelpers
 			expect(page).to have_selector '.alert.alert-success'
 
 			find('#show_specific_price').click
-			if m = /^(\d+(?:\.\d+)?)\s+tax\s+included$/.match(sp.strip)
+			if m = /^minus\s+(\d+(?:\.\d+)?)\s+tax\s+included$/.match(sp.strip)
 				within '#sp_reduction_type' do
 					find('option[value="amount"]').click
 				end
 				fill_in 'sp_reduction', :with => m[1]
-			elsif m = /^(\d+(?:\.\d+)?)\s*%$/.match(sp.strip)
+			elsif m = /^minus\s+(\d+(?:\.\d+)?)\s*%$/.match(sp.strip)
 				find('option[value="percentage"]').click
 				fill_in 'sp_reduction', :with => m[1]
 			else
@@ -447,6 +465,10 @@ module PrestaShopHelpers
 
 		set_order_process_type scenario['meta']['order_process'].to_sym
 
+		scenario["discounts"].each_pair do |name, amount|
+			create_cart_rule :name=> name, :amount => amount
+		end
+
 		carrier_name = get_or_create_carrier({
 			:name => scenario['carrier']['name'],
 			:with_handling_fees => scenario['carrier']['with_handling_fees'],
@@ -458,7 +480,8 @@ module PrestaShopHelpers
 			id = get_or_create_product({
 				:name => name,
 				:price => data['price'],
-				:tax_group_id => get_or_create_tax_group_id_for_rate(data['vat'])
+				:tax_group_id => get_or_create_tax_group_id_for_rate(data['vat']),
+				:specific_price => data['specific_price']
 			})
 			products << {id: id, quantity: data['quantity']}
 

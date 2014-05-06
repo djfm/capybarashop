@@ -13,13 +13,17 @@
 		"Petit Sachet de Vis Cruciformes": {
 			"price": 1.05,
 			"vat": 19.6,
-			"quantity": 4
+			"quantity": 4,
+			"specific_price": "minus 50%"
 		}
+	},
+	"discounts": {
+		"Oh that's cheap!": "1 tax included"
 	},
 	"expect": {
 		"invoice": {
 			"total": {
-				"total_with_tax": 5.02
+				"total_with_tax": 1.54
 			}
 		}
 	}

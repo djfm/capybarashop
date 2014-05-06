@@ -10,7 +10,6 @@ require 'json'
 # READ ME CAREFULLY
 # We prefer convention over configuration, so:
 # - The shop must have its admin folder named 'admin-dev'
-# - The shop must have URL rewriting disabled
 # - There must be a superadmin with login pub@prestashop.com/123456789
 # - There must be a customer with login pub@prestashop.com/123456789
 
@@ -21,10 +20,16 @@ dumper = Dumper.new :user => 'root', :password => '', :database => '1.6'
 
 describe 'Test Invoice - Simple' do
 	before :all do
+		# save the database to restore it later
 		dumper.save
+		
+		login_to_back_office
+		set_friendly_urls false
+		logout_of_back_office
 	end
 
 	after :all do
+		# restore the database
 		dumper.load
 	end
 
