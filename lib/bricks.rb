@@ -187,7 +187,7 @@ module PrestaShopHelpers
 						}
 					end
 				end
-				@@tax_group_ids[rate] = create_tax_group :name => "#Composite {rate} Tax (Group)", :taxes => taxes				
+				@@tax_group_ids[rate] = create_tax_group :name => "Composite #{rate} Tax (Group)", :taxes => taxes				
 			else
 				throw "Invalid tax rate format: #{rate}"
 			end
@@ -508,7 +508,8 @@ module PrestaShopHelpers
 		carrier_name = get_or_create_carrier({
 			:name => scenario['carrier']['name'],
 			:with_handling_fees => scenario['carrier']['with_handling_fees'],
-			:free_shipping => scenario['carrier']['shipping_fees'] == 0
+			:free_shipping => scenario['carrier']['shipping_fees'] == 0,
+			:ranges => [{:from_included => 0, :to_excluded => 1000, :prices => {0 => scenario['carrier']['shipping_fees']}}]
 		})
 
 		products = []
