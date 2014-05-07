@@ -49,9 +49,10 @@ describe 'Test Invoice - Simple' do
 			if entry =~ /\.json$/
 				scenario = JSON.parse(File.read("#{taxes_tests_root}/#{entry}"))
 				unless scenario['meta']['skip']
-					it File.basename(entry, ".json") do
+					test_name = File.basename(entry, ".json")
+					it test_name do
 						puts "Running #{entry}"
-						test_invoice scenario
+						test_invoice scenario, :dump_pdf_to => File.dirname(__FILE__)+"/output/taxes_tests/#{test_name}.pdf"
 					end
 				else
 					puts "Skipping #{entry}"

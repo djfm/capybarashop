@@ -25,7 +25,7 @@
 	"expect": {
 		"invoice": {
 			"total": {
-				"total_with_tax": 9.61
+				"to_pay_tax_included": 9.61
 			}
 		}
 	}

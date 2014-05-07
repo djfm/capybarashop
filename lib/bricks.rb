@@ -7,6 +7,7 @@ require 'capybara-screenshot'
 require 'capybara-screenshot/rspec'
 require 'json'
 require 'set'
+require 'shellwords'
 
 Capybara.default_driver = :selenium
 Capybara.save_and_open_page_path = "screenshots"
@@ -61,7 +62,12 @@ module PrestaShopHelpers
 		find('#maintab-AdminCatalog').hover
 		find('#subtab-AdminProducts a').click
 		find('#page-header-desc-product-new_product').click
+
 		fill_in 'name_1', :with => options[:name]
+		sleep 1
+		find('#link-Seo').click
+		page.should_not have_field('link_rewrite_1', with: "")
+
 		find('#link-Prices').click		
 		fill_in 'priceTE', :with => options[:price]
 		if options[:tax_group_id]
@@ -73,6 +79,7 @@ module PrestaShopHelpers
 		if sp = options[:specific_price]
 			find('button[name=submitAddproductAndStay]').click
 			expect(page).to have_selector '.alert.alert-success'
+			sleep 1
 
 			find('#show_specific_price').click
 			if m = /^minus\s+(\d+(?:\.\d+)?)\s+tax\s+included$/.match(sp.strip)
@@ -86,14 +93,11 @@ module PrestaShopHelpers
 			else
 				throw "Invalid specific price: #{sp}"
 			end
-
-			first('button[name="submitAddproductAndStay"]').click
-			expect(page).to have_selector '.alert.alert-success'
 		end
-		find('#link-Seo').click		
-		page.should_not have_field('link_rewrite_1', with: "")
-		find('button[name=submitAddproductAndStay]').click
+		
+		first('button[name=submitAddproductAndStay]').click
 		expect(page).to have_selector '.alert.alert-success'
+		sleep 1
 
 		# allow ordering if out of stock
 		find('#link-Quantities').click
@@ -157,6 +161,38 @@ module PrestaShopHelpers
 		end
 
 		return page.current_url[/\bid_tax_rules_group=(\d+)/, 1].to_i
+	end
+
+	@@tax_group_ids = {}
+	def get_or_create_tax_group_id_for_rate rate
+		rate = rate.to_s.strip
+		unless @@tax_group_ids[rate]
+			if /^(?:\d+(?:.\d+)?)$/ =~ rate
+				tax_id = create_tax :name => "#{rate}% Tax (Rate)", :rate => rate
+				@@tax_group_ids[rate] = create_tax_group :name => "#{rate}% Tax (Group)",
+					:taxes => [{:tax_id => tax_id}]
+			elsif /(?:\d+(?:.\d+)?)(?:\s*(?:\+|\*)\s*(?:\d+(?:.\d+)?))+/ =~ rate
+				taxes = []
+				combine = {'+' => :sum, '*' => :multiply}[rate[/(\+|\*)/, 1]] || :no
+				rate.split(/\s+/).each do |token|
+					if token == '+'
+						combine = :sum
+					elsif token == '*'
+						combine = :multiply
+					else
+						tax_id = create_tax :name => "#{token}% Tax (Rate)", :rate => token
+						taxes << {
+							:tax_id => tax_id,
+							:combine => combine
+						}
+					end
+				end
+				@@tax_group_ids[rate] = create_tax_group :name => "#Composite {rate} Tax (Group)", :taxes => taxes				
+			else
+				throw "Invalid tax rate format: #{rate}"
+			end
+		end
+		return @@tax_group_ids[rate]
 	end
 
 	def click_label_for id
@@ -273,16 +309,6 @@ module PrestaShopHelpers
 			delete_cart_rule id, false
 		end
 		@@cart_rules = Set.new
-	end
-
-	@@tax_group_ids = {}
-	def get_or_create_tax_group_id_for_rate rate
-		unless @@tax_group_ids[rate]
-			tax_id = create_tax :name => "#{rate}% Tax (Rate)", :rate => rate
-			@@tax_group_ids[rate] = create_tax_group :name => "#{rate}% Tax (Group)",
-				:taxes => [{:tax_id => tax_id}]
-		end
-		return @@tax_group_ids[rate]
 	end
 
 	def create_carrier options
@@ -457,16 +483,26 @@ module PrestaShopHelpers
 		find('#id_order_state_chosen').click
 		find('li[data-option-array-index="6"]').click
 		find('button[name="submitState"]').click
-		visit find('a[href*="generateInvoicePDF"]')['href']+'&debug=1'
+		pdf_url = find('a[href*="generateInvoicePDF"]')['href']
+		
+		all_cookies = page.driver.browser.manage.all_cookies
+		cookies = all_cookies.map do |c| "#{c[:name]}=#{c[:value]}" end.join ";"
+		puts pdf_url
+		cmd = "curl --url #{Shellwords.shellescape pdf_url} -b \"#{cookies}\" -o #{Shellwords.shellescape options[:dump_pdf_to]} 2>/dev/null"
+		`#{cmd}` #download the PDF
+
+		visit pdf_url+'&debug=1'
 		return JSON.parse(page.find('body').text)
 	end
 
-	def test_invoice scenario
+	def test_invoice scenario, options
 
 		set_order_process_type scenario['meta']['order_process'].to_sym
 
-		scenario["discounts"].each_pair do |name, amount|
-			create_cart_rule :name=> name, :amount => amount
+		if scenario["discounts"]
+			scenario["discounts"].each_pair do |name, amount|
+				create_cart_rule :name=> name, :amount => amount
+			end
 		end
 
 		carrier_name = get_or_create_carrier({
@@ -502,12 +538,26 @@ module PrestaShopHelpers
 		else
 			order_current_cart_opc :carrier => carrier_name
 		end
-		invoice = validate_order :id => order_id
+
+		invoice = validate_order :id => order_id, :dump_pdf_to => options[:dump_pdf_to]
 
 		if scenario['expect']['invoice']
-			if total = scenario['expect']['invoice']['total']
-				if total['total_with_tax']
-					invoice['order']['total_paid_tax_incl'].to_f.should eq total['total_with_tax']
+			if expected_total = scenario['expect']['invoice']['total']
+				actual_total = invoice['order']
+				mapping = {
+					'to_pay_tax_included' => 'total_paid_tax_incl',
+					'to_pay_tax_excluded' => 'total_paid_tax_excl',
+					'products_tax_included' => 'total_products_wt',
+					'products_tax_excluded' => 'total_products',
+					'shipping_tax_included' => 'total_shipping_tax_incl',
+					'shipping_tax_excluded' => 'total_shipping_tax_excl',
+					'discounts_tax_included' => 'total_discounts_tax_incl',
+					'discounts_tax_excluded' => 'total_discounts_tax_excl',
+					'wrapping_tax_included' => 'total_wrapping_tax_incl',
+					'wrapping_tax_excluded' => 'total_wrapping_tax_excl'
+				}
+				expected_total.each_pair do |key, value_expected|
+					value_expected.to_s.should eq actual_total[mapping[key]].to_s
 				end
 			end
 		end
