@@ -473,7 +473,8 @@ module PrestaShopHelpers
 		find('a.standard-checkout').click
 		find('button[name="processAddress"]').click
 		expect(page).to have_selector '#uniform-cgv'
-		page.find('#cgv', :visible => false).click
+		click_label_for "cgv"
+		click_label_for "gift" if options[:gift_wrapping]
 		page.find(:xpath, '//tr[contains(., "'+options[:carrier]+'")]').find('input[type=radio]', :visible => false).click
 		find('button[name="processCarrier"]').click
 		find('a.bankwire').click
@@ -486,7 +487,8 @@ module PrestaShopHelpers
 	def order_current_cart_opc options
 		visit "/index.php?controller=order-opc"
 		visit "/index.php?controller=order-opc" #yeah, twice, there's a bug
-		page.find('label[for="cgv"]').click
+		click_label_for "cgv"
+		click_label_for "gift" if options[:gift_wrapping]
 		page.find(:xpath, '//tr[contains(., "'+options[:carrier]+'")]').find('input[type=radio]', :visible => false).click
 		find('a.bankwire').click
 		find('#cart_navigation button').click
@@ -527,6 +529,15 @@ module PrestaShopHelpers
 			end
 		end
 
+		if scenario["gift_wrapping"]
+			set_gift_wrapping_option true,
+				:price => scenario["gift_wrapping"]["price"],
+				:tax_group_id => scenario["gift_wrapping"]["vat"] ? get_or_create_tax_group_id_for_rate(scenario["gift_wrapping"]["vat"]) : nil,
+				:recycling_option => false
+		else
+			set_gift_wrapping_option false
+		end
+
 		carrier_name = get_or_create_carrier({
 			:name => scenario['carrier']['name'],
 			:with_handling_fees => scenario['carrier']['with_handling_fees'],
@@ -558,9 +569,9 @@ module PrestaShopHelpers
 		add_products_to_cart products
 
 		order_id = if scenario['meta']['order_process'] == 'five_steps'
-			order_current_cart_5_steps :carrier => carrier_name
+			order_current_cart_5_steps :carrier => carrier_name, :gift_wrapping => scenario["gift_wrapping"]
 		else
-			order_current_cart_opc :carrier => carrier_name
+			order_current_cart_opc :carrier => carrier_name, :gift_wrapping => scenario["gift_wrapping"]
 		end
 
 		invoice = validate_order :id => order_id, :dump_pdf_to => options[:dump_pdf_to]

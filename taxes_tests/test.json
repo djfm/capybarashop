@@ -21,6 +21,10 @@
 	"discounts": {
 		"Oh that's cheap!": "1 tax included"
 	},
+	"gift_wrapping": {
+		"price": 2,
+		"vat": "19.6"
+	},
 	"expect": {
 		"invoice": {
 			"total": {
