@@ -1,5 +1,6 @@
 {
 	"meta": {
+		"skip": true,
 		"order_process": "opc",
 		"rounding_rule": "total",
 		"rounding_method": "half_up" 
