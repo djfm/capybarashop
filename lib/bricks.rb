@@ -64,7 +64,7 @@ module PrestaShopHelpers
 		find('#page-header-desc-product-new_product').click
 
 		fill_in 'name_1', :with => options[:name]
-		sleep 1
+		sleep 2
 		find('#link-Seo').click
 		page.should_not have_field('link_rewrite_1', with: "")
 
@@ -79,7 +79,7 @@ module PrestaShopHelpers
 		if sp = options[:specific_price]
 			find('button[name=submitAddproductAndStay]').click
 			expect(page).to have_selector '.alert.alert-success'
-			sleep 1
+			sleep 2
 
 			find('#show_specific_price').click
 			if m = /^minus\s+(\d+(?:\.\d+)?)\s+tax\s+included$/.match(sp.strip)
@@ -97,7 +97,7 @@ module PrestaShopHelpers
 		
 		first('button[name=submitAddproductAndStay]').click
 		expect(page).to have_selector '.alert.alert-success'
-		sleep 1
+		sleep 2
 
 		# allow ordering if out of stock
 		find('#link-Quantities').click
@@ -509,7 +509,8 @@ module PrestaShopHelpers
 			:name => scenario['carrier']['name'],
 			:with_handling_fees => scenario['carrier']['with_handling_fees'],
 			:free_shipping => scenario['carrier']['shipping_fees'] == 0,
-			:ranges => [{:from_included => 0, :to_excluded => 1000, :prices => {0 => scenario['carrier']['shipping_fees']}}]
+			:ranges => [{:from_included => 0, :to_excluded => 1000, :prices => {0 => scenario['carrier']['shipping_fees']}}],
+			:tax_group_id => scenario['carrier']['vat'] ? get_or_create_tax_group_id_for_rate(scenario['carrier']['vat']) : nil
 		})
 
 		products = []

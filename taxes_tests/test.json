@@ -7,7 +7,8 @@
 	"carrier": {
 		"name": "SeleniumShipping",
 		"with_handling_fees": false,
-		"shipping_fees": 0
+		"shipping_fees": 2,
+		"vat": "19.6"
 	},
 	"products": {
 		"Petit Sachet de Vis Cruciformes": {
@@ -23,7 +24,7 @@
 	"expect": {
 		"invoice": {
 			"total": {
-				"to_pay_tax_included": 1.54
+				"to_pay_tax_included": 3.54
 			}
 		}
 	}

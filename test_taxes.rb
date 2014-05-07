@@ -30,7 +30,7 @@ describe 'Test Invoice - Simple' do
 
 	after :all do
 		# restore the database
-		dumper.load
+		# dumper.load
 	end
 
 	before :each do 
