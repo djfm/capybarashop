@@ -57,6 +57,28 @@ module PrestaShopHelpers
 		expect(page).to have_selector '.alert.alert-success'
 	end
 
+	def set_gift_wrapping_option on, options
+		visit '/admin-dev'
+		find('#maintab-AdminParentPreferences').hover
+		find('#subtab-AdminOrderPreferences a').click
+		if on
+			click_label_for 'PS_GIFT_WRAPPING_on'
+			find('input[name="PS_GIFT_WRAPPING_PRICE"]').set options[:price]
+			within '#PS_GIFT_WRAPPING_TAX_RULES_GROUP' do
+				find("option[value='#{options[:tax_group_id] || 0}']").click
+			end
+			if options[:recycling_option]
+				click_label_for 'PS_RECYCLABLE_PACK_on'
+			else
+				click_label_for 'PS_RECYCLABLE_PACK_off'
+			end
+		else
+			click_label_for 'PS_GIFT_WRAPPING_off'
+		end
+		first('button[name="submitOptionsconfiguration"]').click
+		expect(page).to have_selector '.alert.alert-success'
+	end
+
 	def create_product options
 		visit '/admin-dev'
 		find('#maintab-AdminCatalog').hover
@@ -337,7 +359,7 @@ module PrestaShopHelpers
 			find("option[value='#{options[:tax_group_id] || 0}']").click
 		end
 
-		oob = options[:out_of_range_behavior] === :highest ? 0 : 1
+		oob = options[:out_of_range_behavior] === :disable ? 1 : 0
 
 		within '#range_behavior' do
 			find("option[value='#{oob}']").click
